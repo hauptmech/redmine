@@ -50,7 +50,7 @@ class MailHandler < ActionMailer::Base
   # Use when receiving emails with rake tasks
   def self.extract_options_from_env(env)
     options = {:issue => {}}
-    %w(project status tracker category priority).each do |option|
+    %w(project status tracker category priority board).each do |option|
       options[:issue][option.to_sym] = env[option] if env[option]
     end
     %w(allow_override unknown_user no_permission_check no_account_notice default_group).each do |option|
@@ -171,7 +171,27 @@ class MailHandler < ActionMailer::Base
   end
 
   def dispatch_to_default
-    receive_issue
+	if get_keyword(:board)
+		receive_message
+	else
+		receive_issue
+  end
+
+  # Creates a new issue
+  def receive_message
+    board = target_board
+    # check permission
+    unless @@handler_options[:no_permission_check]
+      raise UnauthorizedAction unless user.allowed_to?(:add_messages, board.project)
+    end
+
+    message = Message.new(:subject => cleaned_up_subject.gsub(%r{^.*msg\d+\]}, '').strip,
+                            :content => cleaned_up_text_body)
+	message.author = user
+	message.board = board
+	add_attachments(message)
+    logger.info "MailHandler: message ##{message.id} created by #{user}" if logger
+	message
   end
 
   # Creates a new issue
@@ -340,6 +360,22 @@ class MailHandler < ActionMailer::Base
       text.gsub!(regexp, '')
     end
     keyword
+  end
+
+  def target_board
+    # TODO: other ways to specify project:
+    # * parse the email To field
+    # * specific project (eg. Setting.mail_handler_target_project)
+	target = Board.find_by_id(get_keyword(:board))
+    if target.nil?
+      # Invalid project keyword, use the project specified as the default one
+      default_board = @@handler_options[:issue][:board]
+      if default_board.present?
+        target = Board.find_by_id(default_board)
+      end
+    end
+    raise MissingInformation.new('Unable to determine target board') if target.nil?
+    target
   end
 
   def target_project

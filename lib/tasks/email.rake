@@ -82,6 +82,7 @@ Available IMAP options:
 
 Issue attributes control options:
   project=PROJECT          identifier of the target project
+  board=BOARD_ID        identifier of the board unknown input goes to
   status=STATUS            name of the target status
   tracker=TRACKER          name of the target tracker
   category=CATEGORY        name of the target category
